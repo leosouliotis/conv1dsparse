@@ -1,34 +1,32 @@
-import numpy as np
+class Conv1dsparse(nn.Module):
 
-import torch
-import torch.nn.functional as F
-import torch.nn as nn
+    def __init__(self, conv, lengths):
+        super(Conv1dsparse, self).__init__()
 
+        self.kernel_size = conv.kernel_size[0]
+        self.out_channels = conv.out_channels
+        self.lengths = lengths
+        self.weight = conv.weight
 
-class conv1dsparse(nn.Module):
+        if conv.bias is None:
+            self.bias_ind = False
+        else:
+            self.bias = conv.bias
+            self.bias_ind = True
 
-    def __init__(self, out_channels, kernel_size, weights, **keyword_parameters):
-        super(MyCustomLayer, self).__init__()
-
-        self.kernel_size = kernel_size
-        self.out_channels = out_channels
-        if 'lengths' in keyword_parameters:
-        self.lengths = genome_lengths
-        self.weight = weights
-        
     def forward(self, sparse_tensor):
-        # 3D tensor storing the position of each non-negative element of each genome
+        # 3D tensor storing the position of each non-negative element of each datum
         indices = sparse_tensor._indices()
         N = sparse_tensor.shape[0]
-        if not self.lengths:
-            self.lengths = [sparse_tensor.shape[2] for _ in range(N)]
+        #if not self.lengths:
+        #    self.lengths = [sparse_tensor.shape[2] for _ in range(N)]
         dims = self.weight.shape
         out_channels = dims[0]  # No of output channels
         out_len = sparse_tensor.size(2) - self.kernel_size + 1
         out_ch = torch.zeros([N, out_channels, out_len])
         prev_gen = 0
 
-        for genome in range(N):  # looping for all genomes
+        for datum in range(N):  # looping for all genomes
 
             genome_pos = [i for i in range(prev_gen, prev_gen + self.lengths[datum])]
             prev_gen += self.lengths[datum]
@@ -48,7 +46,6 @@ class conv1dsparse(nn.Module):
 
             # For each input chanel present
             for ind, values in enumerate(keggs_present_dict.items()):
-                # ind, values = next((i,x) for i,x in enumerate(keggs_present_dict.items()) if i==1)
                 in_channel, position = values
                 if adj_list[ind] == 0 or adj_list[ind] == 1:
 
@@ -84,9 +81,10 @@ class conv1dsparse(nn.Module):
 
                             kernel_pos = [[k for k, l in enumerate(i) if l in el] for i in filter_range]
                             temp = [i[0] if len(i) > 0 else i for i in filter_range]
-                            convolutions = torch.stack([self.weight[:, in_channel, i].sum(1).view(out_channels, 1) if len(i) > 1
-                                                        else self.weight[:, in_channel, i].view(out_channels, 1)
-                                                        for i in kernel_pos], 1).view(out_channels, len(temp))
+                            convolutions = torch.stack(
+                                [self.weight[:, in_channel, i].sum(1).view(out_channels, 1) if len(i) > 1
+                                 else self.weight[:, in_channel, i].view(out_channels, 1)
+                                 for i in kernel_pos], 1).view(out_channels, len(temp))
                             out_ch[datum, :, temp] += convolutions
 
                     if non_cont:
@@ -100,5 +98,9 @@ class conv1dsparse(nn.Module):
                             convolutions = torch.stack([self.weight[:, in_channel, i].view(out_channels, 1)
                                                         for i in kernel_pos], 1).view(out_channels, len(temp))
                             out_ch[datum, :, temp] += convolutions
+
+        if self.bias_ind:
+            out_ch += torch.tensor([[el for el in self.bias for _ in range(out_len)]
+                                    for _ in range(N)]).view(N, self.out_channels, out_len)
 
         return out_ch
