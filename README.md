@@ -65,3 +65,6 @@ lengths = [11]
 conv1 = nn.Conv1d(in_channels, out_channels, kernel_size)
 model = Conv1dsparse(conv1, genome_lengths)
 ```
+
+## To DO:
+* Add support for padding
